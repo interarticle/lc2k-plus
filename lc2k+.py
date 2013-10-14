@@ -49,6 +49,15 @@ argSplitter = re.compile(r'\s+')
 def string_replace(string, replacement, start, end):
 	return string[0:start] + replacement + string[end:], start + len(replacement)
 
+def chain(gen_input, *gen_funcs):
+	"""
+	Chain generator functions by calling each generator with the input of the previous one.
+	The first generator is passed the gen_input value
+	"""
+	for func in gen_funcs:
+		gen_input = func(gen_input)
+	return gen_input
+
 def main():
 	parser = argparse.ArgumentParser(description="LC2K Macro Preprocessor")
 	parser.add_argument("sourceFile", nargs=1)
@@ -264,29 +273,11 @@ def main():
 		finput = open(args.sourceFile[0], 'r')
 	if args.destFile[0] != "-":
 		foutput = open(args.destFile[0], 'w')
-	for ln in resolveLabels(
-		restoreRegisters(
-			numberToFill(
-				cleanLines(
-					expandSemicolons(
-						processMacros(
-							cleanLines(
-								preprocessLabels(
-									processComments(
-										processEOL(
-											cleanLines(
-												finput
-												)
-											)
-										)
-									)
-								)
-							)
-						)
-					)
-				)
-			)
-		):
+	#Data is passed in this direction >------->-------------->---------------->--------
+	processor = chain(finput, cleanLines, processEOL, processComments, preprocessLabels,
+		cleanLines, processMacros, expandSemicolons, cleanLines, numberToFill,
+		restoreRegisters, resolveLabels)
+	for ln in processor:
 		foutput.write(ln)
 		foutput.write("\n")
 
