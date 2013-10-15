@@ -33,7 +33,7 @@ THE SOFTWARE.
 __author__    = "赵迤晨 (Zhao, Yichen) <interarticle@gmail.com>"
 __copyright__ = "Copyright (C) 2013 赵迤晨 (Zhao, Yichen)"
 __license__   = "MIT"
-__version__   = "0.1"
+__version__   = "0.2"
 __status__    = "Prototype"
 __email__     = "interarticle@gmail.com"
 
@@ -44,7 +44,8 @@ import sys
 MACRO_VAL =0
 MACRO_FUNC=1
 
-argSplitter = re.compile(r'\s+')
+argSplitter = re.compile(r'\s*,\s*')
+instrSplitter = re.compile(r'\s+')
 
 def string_replace(string, replacement, start, end):
 	return string[0:start] + replacement + string[end:], start + len(replacement)
@@ -58,12 +59,23 @@ def chain(gen_input, *gen_funcs):
 		gen_input = func(gen_input)
 	return gen_input
 
-def main():
-	parser = argparse.ArgumentParser(description="LC2K Macro Preprocessor")
-	parser.add_argument("sourceFile", nargs=1)
-	parser.add_argument("destFile",nargs=1)
-	args = parser.parse_args()
-
+def LC2KProcessor(finput):
+	inputs = []
+	def insertableGenerator(inputs):
+		cindex = 0
+		iters = []
+		while True:
+			if inputs:
+				for fs in inputs:
+					iters.append(iter(fs))
+				inputs[:] = [] #clear
+			if iters:
+				try:
+					yield iters[len(iters) - 1].next()
+				except StopIteration:
+					iters.pop()
+			else:
+				break
 	def cleanLines(lines):
 		"""
 		Trim and remove empty lines
@@ -144,7 +156,9 @@ def main():
 		"""
 		macroDef = re.compile(r'^(?P<name>[a-zA-Z0-9_\$\.]+)\s*(\((?P<args>[^\)]+)\)|)\s*(?P<value>.*)$')
 		macroNameScan = re.compile(r'(?P<name>[a-zA-Z0-9_\$\.]+)')
-		macroScan = re.compile(r'(?P<name>[a-zA-Z0-9_\$\.]+)\s*(\((?P<args>[^\)]+)\)|)')
+		macroScan = re.compile(r'(?P<name>[a-zA-Z0-9_\$\.]+)\s*\((?P<args>[^\)]+)\)')
+		includeDef = re.compile(r'("(?P<file>.+)"|<(?P<lib>.+)>)\s*$')
+		prepCmdDef = re.compile(r'#(?P<name>[a-zA-Z0-9_\$\.]+)\s*')
 
 		macros = {}
 
@@ -203,14 +217,24 @@ def main():
 				return (MACRO_VAL, substituteMacros(macroMatch.group("value")))
 
 		for line in lines:
-			if line.startswith("#"):
-				if not line.startswith("#define"):
+			prepCmdMatch = prepCmdDef.match(line)
+			if prepCmdMatch:
+				cmdType = prepCmdMatch.group("name")
+				macro = line[prepCmdMatch.end():]
+				if cmdType == "define":
+					macroMatch = macroDef.match(macro)
+					if not macroMatch:
+						raise Exception("Invalid Macro " + line)
+					macros[macroMatch.group("name")] = generateMacroFunc(macroMatch)
+				elif cmdType == "include":
+					includeMatch = includeDef.match(macro)
+					if not includeMatch:
+						raise Exception("Invalid include path " + macro)
+					if not includeMatch.group("file"):
+						raise Exception("Sorry, but library inclusion is not yet supported. " + macro)
+					inputs.append(open(includeMatch.group("file"), 'r'))
+				else:
 					raise Exception("Invalid Macro " + line[1:])
-				macro = line[len("#define"):].strip()
-				macroMatch = macroDef.match(macro)
-				if not macroMatch:
-					raise Exception("Invalid Macro " + line)
-				macros[macroMatch.group("name")] = generateMacroFunc(macroMatch)
 			else:
 				yield substituteMacros(line)
 	def expandSemicolons(lines):
@@ -239,7 +263,7 @@ def main():
 		"""
 		regFormat = re.compile(r"\br(\d)\b")
 		for ln in lines:
-			startMatch = argSplitter.search(ln)
+			startMatch = instrSplitter.search(ln)
 			if startMatch:
 				ln = ln[0:startMatch.end()] + regFormat.sub(r"\1",ln[startMatch.end():])
 			yield ln
@@ -260,13 +284,18 @@ def main():
 			else:
 				yield "%-6s %s" % (clabel, ln)
 				clabel = ""
+	inputs.append(finput)
+	return chain(insertableGenerator(inputs), cleanLines, processEOL, processComments, preprocessLabels,
+		cleanLines, processMacros, expandSemicolons, cleanLines, numberToFill,
+		restoreRegisters, resolveLabels)
 
-	#Um, this is embarrassing. The following code is directly adapted from test code,
-	#therefore, they are not aesthetically pleasing. The following code essentially 
-	#invokes different parts of the program chained up through a series of (Python)
-	#generators, allowing parts of the source code file to be processed in a pipeline,
-	#making use of smaller amounts of memory (does it really matter with LC2K?), and 
-	#easier/clearer to write
+def main():
+	parser = argparse.ArgumentParser(description="LC2K Macro Preprocessor")
+	parser.add_argument("sourceFile", nargs=1)
+	parser.add_argument("destFile",nargs=1)
+	args = parser.parse_args()
+
+	#Tidied up 2013-10-15
 	finput = sys.stdin
 	foutput = sys.stdout
 	if args.sourceFile[0] != "-":
@@ -274,9 +303,7 @@ def main():
 	if args.destFile[0] != "-":
 		foutput = open(args.destFile[0], 'w')
 	#Data is passed in this direction >------->-------------->---------------->--------
-	processor = chain(finput, cleanLines, processEOL, processComments, preprocessLabels,
-		cleanLines, processMacros, expandSemicolons, cleanLines, numberToFill,
-		restoreRegisters, resolveLabels)
+	processor = LC2KProcessor(finput)
 	for ln in processor:
 		foutput.write(ln)
 		foutput.write("\n")
