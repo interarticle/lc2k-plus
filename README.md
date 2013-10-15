@@ -3,7 +3,7 @@ LC2K+ Macro Preprocessor
 
 LC2K+ is a C-like macro preprocessor for [LC2K](http://evanhahn.com/random/eecs-370-lc-2k-tricks/), 
 the assembly language used for EECS370 at the University of Michigan. It adds basic C-like symbol 
-and function style macro definition, line continuation, better labelling, and C and C++ style comments 
+and function style macro definition, line continuation, better labelling, and C/C++ style comments 
 to the LC2K assembly language.
 
 Writing assembly is hard. Writing LC2K is harder. LC2K+ makes it easier to write your LC2K assembly
