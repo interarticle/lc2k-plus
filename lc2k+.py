@@ -184,6 +184,7 @@ def LC2KProcessor(finput):
 			return line
 		def generateMacroFunc(macroMatch):
 			if macroMatch.group("args"):
+				name = macroMatch.group("name")
 				#has arguments
 				args = argSplitter.split(macroMatch.group("args").strip())
 				value = macroMatch.group("value")
@@ -206,10 +207,15 @@ def LC2KProcessor(finput):
 
 				def macroResolver(params):
 					#replace parameters in value
-					output = "".join(map(lambda x: params[x] if type(x) == int else str(x), values))
-					output = substituteMacros(output)
-					return output
-					pass
+					try:
+						output = "".join(map(lambda x: params[x] if type(x) == int else str(x), values))
+						output = substituteMacros(output)
+						return output
+					except IndexError:
+						sys.stderr.write(repr(values) + "\n")
+						sys.stderr.write(repr(params) + "\n")
+						sys.stderr.write(name + "\n")
+						assert(0)
 				return (MACRO_FUNC, macroResolver)
 
 			else:
